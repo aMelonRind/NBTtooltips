@@ -62,9 +62,6 @@ public class TooltipChanger {
         list.addAll(index, builder.build());
     }
 
-    /**
-     * @author aMelonRind
-     */
     private static class NbtTextBuilder {
         private static final Set<List<String>> textPaths = Set.of(
                 List.of("minecraft:custom_data", "display", "Name"),
@@ -287,8 +284,8 @@ public class TooltipChanger {
                 case NbtElement.FLOAT_TYPE -> append(((NbtFloat) element).floatValue());
                 case NbtElement.DOUBLE_TYPE -> append(((NbtDouble) element).doubleValue());
                 case NbtElement.STRING_TYPE -> appendString(textPaths.contains(stack)
-                        ? element.asString().get().replaceAll("(?<=[,{])\"(?:bold|italic|underlined|strikethrough|obfuscated)\":false,", "").replaceAll(",\"underlined\":false(?=})", "")
-                        : element.asString().get());
+                        ? element.asString().orElse("").replaceAll("(?<=[,{])\"(?:bold|italic|underlined|strikethrough|obfuscated)\":false,", "").replaceAll(",\"underlined\":false(?=})", "")
+                        : element.asString().orElse(""));
                 case NbtElement.COMPOUND_TYPE -> {
                     NbtCompound compound = (NbtCompound) element;
                     appendNoLineBreak(BRACKET_START).ignoreNextSeparator();
@@ -316,26 +313,26 @@ public class TooltipChanger {
                 case NbtElement.BYTE_ARRAY_TYPE -> {
                     arrayHeader(BYTE);
                     for (var e : (NbtByteArray) element) {
-                        separator().append(e.asByte().get());
+                        separator().append(e.asByte().orElse((byte) 0));
                     }
                     append(SQUARE_BRACKET_END);
                 }
                 case NbtElement.INT_ARRAY_TYPE -> {
                     arrayHeader(INTEGER);
                     for (var e : (NbtIntArray) element) {
-                        separator().append(e.asInt().get());
+                        separator().append(e.asInt().orElse(0));
                     }
                     append(SQUARE_BRACKET_END);
                 }
                 case NbtElement.LONG_ARRAY_TYPE -> {
                     arrayHeader(LONG);
                     for (var e : (NbtLongArray) element) {
-                        separator().append(e.asLong().get());
+                        separator().append(e.asLong().orElse(0L));
                     }
                     append(SQUARE_BRACKET_END);
                 }
                 case NbtElement.END_TYPE -> appendRaw("end", typeColour);
-                default -> appendRaw(element.asString().get(), Formatting.RED);
+                default -> appendRaw(element.asString().orElse(""), Formatting.RED);
             }
         }
 

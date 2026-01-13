@@ -31,6 +31,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -107,11 +108,12 @@ public class SimpleConfig {
     private void createConfig() throws IOException {
 
         // try creating missing files
+        //noinspection ResultOfMethodCallIgnored
         request.file.getParentFile().mkdirs();
         Files.createFile( request.file.toPath() );
 
         // write default config data
-        PrintWriter writer = new PrintWriter(request.file, "UTF-8");
+        PrintWriter writer = new PrintWriter(request.file, StandardCharsets.UTF_8);
         writer.write( request.getConfig() );
         writer.close();
 
@@ -173,8 +175,7 @@ public class SimpleConfig {
      * @return  value corresponding to the given key
      * @see     SimpleConfig#getOrDefault
      */
-    @Deprecated
-    public String get( String key ) {
+    private String get( String key ) {
         return config.get( key );
     }
 
