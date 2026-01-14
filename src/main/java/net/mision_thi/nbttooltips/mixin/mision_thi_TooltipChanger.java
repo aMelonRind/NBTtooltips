@@ -1,6 +1,7 @@
 package net.mision_thi.nbttooltips.mixin;
 
-import net.minecraft.client.util.InputUtil;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
@@ -13,12 +14,9 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.List;
-
-import static net.mision_thi.nbttooltips.NBTtooltipsMod.client;
 
 @Mixin(ItemStack.class)
 public abstract class mision_thi_TooltipChanger {
@@ -27,11 +25,10 @@ public abstract class mision_thi_TooltipChanger {
 
 	@Unique private boolean shouldShow = false;
 
-	@Redirect(method = "getTooltip", at = @At(value = "INVOKE", target = "Lnet/minecraft/item/tooltip/TooltipType;isCreative()Z"))
-	protected boolean forceVisible(TooltipType instance) {
-		int code = InputUtil.fromTranslationKey(NBTtooltipsMod.KEYBIND.getBoundKeyTranslationKey()).getCode();
-		shouldShow = instance.isAdvanced() && InputUtil.isKeyPressed(client.getWindow(), code);
-		return shouldShow || instance.isCreative();
+	@WrapOperation(method = "getTooltip", at = @At(value = "INVOKE", target = "Lnet/minecraft/item/tooltip/TooltipType;isCreative()Z"))
+	protected boolean forceVisible(TooltipType instance, Operation<Boolean> original) {
+		shouldShow = instance.isAdvanced() && NBTtooltipsMod.isKeyPressed(NBTtooltipsMod.KEYBIND);
+		return shouldShow || original.call(instance);
 	}
 
 	@Inject(method = "getTooltip", at = @At("RETURN"))

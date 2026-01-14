@@ -1,4 +1,6 @@
 {
   "nbttooltips.keybind": "Show NBT",
+  "nbttooltips.keybind.verbose": "Show Verbose NBT",
+  "nbttooltips.keybind.parse_base64": "Show NBT With Parsed Base64",
   "item.nbt_tags.nbttooltips": "NBT: "
 }

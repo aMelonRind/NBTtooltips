@@ -10,6 +10,7 @@ import net.minecraft.registry.entry.RegistryEntryOwner;
 import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+import net.mision_thi.nbttooltips.NBTtooltipsMod;
 import net.mision_thi.nbttooltips.config.ModConfigs;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
@@ -63,14 +64,17 @@ public class TooltipChanger {
     }
 
     private static class NbtTextBuilder {
-        private static final Set<List<String>> textPaths = Set.of(
-                List.of("minecraft:custom_data", "display", "Name"),
-                List.of("minecraft:custom_data", "display", "Lore", "[]"),
-                List.of("minecraft:custom_name"),
-                List.of("minecraft:lore", "[]")
+        private static final Set<String> vvTextKeywords = Set.of("display", "title", "pages");
+        private static final Set<String> textKeywords = Set.of(
+                "minecraft:custom_name", "minecraft:lore",
+                "minecraft:written_book_content", "minecraft:writable_book_content"
+        );
+        private static final Set<String> styleKeys = Set.of(
+                "bold", "italic", "underlined", "strikethrough", "obfuscated"
         );
 
         private final int SPACE_WIDTH = client.textRenderer.getWidth(" ");
+
         // config
         private final int lineStep = Math.min(ModConfigs.LINE_LIMIT * 6, client.getWindow().getScaledWidth() - 80);
         private final Formatting stringColour = colour(ModConfigs.STRING_COLOUR);
@@ -81,6 +85,11 @@ public class TooltipChanger {
         private final Formatting fieldColour = colour(ModConfigs.FIELD_COLOUR);
         private final Formatting lstringColour = colour(ModConfigs.LSTRING_COLOUR);
 
+        // keybind
+        private final boolean verbose = NBTtooltipsMod.isKeyPressed(NBTtooltipsMod.KEYBIND_VERBOSE);
+        private final boolean parseBase64 = NBTtooltipsMod.isKeyPressed(NBTtooltipsMod.KEYBIND_PARSE_BASE64);
+
+        // formatted constants
         private final Text SINGLE_QUOTE = Text.literal("'").formatted(quotationColour);
         private final Text DOUBLE_QUOTE = Text.literal("\"").formatted(quotationColour);
         private final Text LSTRING = Text.empty().append(DOUBLE_QUOTE).append(Text.literal("....").formatted(lstringColour)).append(DOUBLE_QUOTE);
@@ -100,6 +109,7 @@ public class TooltipChanger {
         private final Text INTEGER = Text.literal("I").formatted(typeColour);
         private final Text LONG = Text.literal("L").formatted(typeColour);
         private final Text FLOAT = Text.literal("f").formatted(typeColour);
+
 
         private final Stack<String> stack = new Stack<>();
         private final List<List<Text>> list = new ArrayList<>();
@@ -206,8 +216,15 @@ public class TooltipChanger {
         }
 
         private void appendString(String str) {
+            if (parseBase64 && str.matches("^[A-Za-z0-9+/]+=?=?$")) {
+                try {
+                    str = new String(Base64.getDecoder().decode(str))
+                            .replaceAll("\n", "\\\\n")
+                            .replaceAll("\"", "\\\\\"");
+                } catch (Exception ignore) {}
+            }
             str = NbtString.escape(str);
-            if (client.textRenderer.getWidth(str) >= lineStep) append(LSTRING);
+            if (!verbose && client.textRenderer.getWidth(str) >= lineStep) append(LSTRING);
             else {
                 Text quote = str.charAt(0) == '\'' ? SINGLE_QUOTE : DOUBLE_QUOTE;
                 append(Text.empty()
@@ -229,6 +246,10 @@ public class TooltipChanger {
 
         private void ignoreNextSeparator() {
             ignoreNextSeparator = true;
+        }
+
+        private void unignoreNextSeparator() {
+            ignoreNextSeparator = false;
         }
 
         private NbtTextBuilder separator() {
@@ -271,6 +292,16 @@ public class TooltipChanger {
             appendNumber(Double.toString(num));
         }
 
+        private boolean isInViaVersionTextElement() {
+            return !verbose && stack.size() >= 2
+                    && stack.get(0).equals("minecraft:custom_data")
+                    && vvTextKeywords.contains(stack.get(1));
+        }
+
+        private boolean isInTextElement() {
+            return !verbose && !stack.isEmpty() && textKeywords.contains(stack.getFirst());
+        }
+
         public void buildElement(NbtElement element) {
             if (element == null) {
                 appendRaw("null", typeColour);
@@ -283,7 +314,7 @@ public class TooltipChanger {
                 case NbtElement.LONG_TYPE -> append(((NbtLong) element).longValue());
                 case NbtElement.FLOAT_TYPE -> append(((NbtFloat) element).floatValue());
                 case NbtElement.DOUBLE_TYPE -> append(((NbtDouble) element).doubleValue());
-                case NbtElement.STRING_TYPE -> appendString(textPaths.contains(stack)
+                case NbtElement.STRING_TYPE -> appendString(isInViaVersionTextElement()
                         ? element.asString().orElse("").replaceAll("(?<=[,{])\"(?:bold|italic|underlined|strikethrough|obfuscated)\":false,", "").replaceAll(",\"underlined\":false(?=})", "")
                         : element.asString().orElse(""));
                 case NbtElement.COMPOUND_TYPE -> {
@@ -291,15 +322,22 @@ public class TooltipChanger {
                     appendNoLineBreak(BRACKET_START).ignoreNextSeparator();
                     for (String key : compound.getKeys()) {
                         NbtElement e = compound.get(key);
+                        if (e != null
+                                && e.getType() == NbtElement.BYTE_TYPE
+                                && e.asByte().orElse((byte) 1) == 0
+                                && isInTextElement()
+                                && styleKeys.contains(key)
+                        ) continue;
                         separator();
                         if (e instanceof AbstractNbtNumber) groupStart();
-                        appendField(key.replaceFirst("^minecraft:", "mc:"));
+                        appendField(verbose ? key : key.replaceFirst("^minecraft:", "mc:"));
                         stack.push(key);
                         buildElement(e);
                         stack.pop();
                         groupEnd();
                     }
                     append(BRACKET_END);
+                    unignoreNextSeparator();
                 }
                 case NbtElement.LIST_TYPE -> {
                     appendNoLineBreak(SQUARE_BRACKET_START).ignoreNextSeparator();
@@ -309,6 +347,7 @@ public class TooltipChanger {
                     }
                     stack.pop();
                     append(SQUARE_BRACKET_END);
+                    unignoreNextSeparator();
                 }
                 case NbtElement.BYTE_ARRAY_TYPE -> {
                     arrayHeader(BYTE);
@@ -316,6 +355,7 @@ public class TooltipChanger {
                         separator().append(e.asByte().orElse((byte) 0));
                     }
                     append(SQUARE_BRACKET_END);
+                    unignoreNextSeparator();
                 }
                 case NbtElement.INT_ARRAY_TYPE -> {
                     arrayHeader(INTEGER);
@@ -323,6 +363,7 @@ public class TooltipChanger {
                         separator().append(e.asInt().orElse(0));
                     }
                     append(SQUARE_BRACKET_END);
+                    unignoreNextSeparator();
                 }
                 case NbtElement.LONG_ARRAY_TYPE -> {
                     arrayHeader(LONG);
@@ -330,6 +371,7 @@ public class TooltipChanger {
                         separator().append(e.asLong().orElse(0L));
                     }
                     append(SQUARE_BRACKET_END);
+                    unignoreNextSeparator();
                 }
                 case NbtElement.END_TYPE -> appendRaw("end", typeColour);
                 default -> appendRaw(element.asString().orElse(""), Formatting.RED);
